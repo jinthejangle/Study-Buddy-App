@@ -1,0 +1,280 @@
+// We will assume all functions will be built around these objects
+// Define a User/Student object
+STRUCT User {
+    INT user_id
+    STRING name
+    STRING email
+    STRING password_hash
+    ARRAY<STRING> enrolled_courses  // e.g., ["CPSC1010", "MATH2060"]
+}
+
+// Define a TimeSlot object for a user's availability
+STRUCT TimeSlot {
+    INT slot_id
+    INT user_id
+    DATETIME start_time
+    DATETIME end_time
+    BOOL is_available // Could be used to "remove" availability without deleting
+}
+
+// Define a StudySession object (a confirmed meeting)
+STRUCT StudySession {
+    INT session_id
+    STRING course
+    DATETIME scheduled_time
+    STRING location // or virtual link
+    ARRAY<INT> participant_user_ids // List of user IDs in the session
+    STRING status // e.g., "pending", "confirmed", "cancelled"
+}
+
+// Pseudocode below
+// User registration and login
+FUNCTION main():
+    WHILE True:
+        PRINT "Welcome to Study Buddy! Please choose an option from the menu. Type in a number."
+        PRINT "1. Login"
+        PRINT "2. Register"
+        PRINT "3. Exit"
+
+        choice = GET user input
+
+        IF choice == "1":
+            user = FUNCTION login()
+            IF user is not NULL:
+                FUNCTION user_dashboard(user)
+        ELSE IF choice == "2":
+            FUNCTION register()
+        ELSE IF choice == "3":
+            BREAK
+        ELSE:
+            PRINT "Invalid choice"
+
+FUNCTION login():
+    email = GET "Enter email: "
+    password = GET "Enter password: "
+    // Find user by email in the database
+    user = DATABASE.find_user_by_email(email)
+    IF user exists AND VERIFY_PASSWORD(password, user.password_hash):
+        PRINT "Login successful!"
+        RETURN user
+    ELSE:
+        PRINT "Invalid credentials."
+        RETURN NULL
+
+FUNCTION register():
+    name = GET "Enter your name: "
+    email = GET "Enter your email: "
+    password = GET "Enter a password: "
+    courses = GET "Enter your courses (comma-separated): " SPLIT by comma
+
+    // Check if email is already registered
+    IF DATABASE.user_email_exists(email):
+        PRINT "Email already in use."
+        RETURN
+
+    hashed_password = HASH_PASSWORD(password)
+    new_user = CREATE_NEW_USER(name, email, hashed_password, courses)
+    DATABASE.save_user(new_user)
+    PRINT "Registration successful! Please login."
+
+// Main menu/dashboard
+FUNCTION user_dashboard(User current_user):
+    WHILE True:
+        PRINT "\n--- Study Buddy Dashboard ---"
+        PRINT "Logged in as: " + current_user.name
+        PRINT "1. Manage My Availability"
+        PRINT "2. Find a Study Buddy"
+        PRINT "3. View My Upcoming Sessions"
+        PRINT "4. View My Profile/Courses"
+        PRINT "5. Logout"
+
+        choice = GET user input
+
+        IF choice == "1":
+            FUNCTION manage_availability(current_user)
+        ELSE IF choice == "2":
+            FUNCTION find_study_buddy(current_user)
+        ELSE IF choice == "3":
+            FUNCTION view_upcoming_sessions(current_user)
+        ELSE IF choice == "4":
+            FUNCTION view_profile(current_user)
+        ELSE IF choice == "5":
+            PRINT "Logging out..."
+            BREAK
+        ELSE:
+            PRINT "Invalid choice"
+
+// Manage availability
+FUNCTION manage_availability(User user):
+    WHILE True:
+        PRINT "\n--- My Availability ---"
+        // Fetch user's existing time slots from database
+        existing_slots = DATABASE.get_time_slots_for_user(user.user_id)
+
+        PRINT "Current Slots:"
+        FOR each slot in existing_slots:
+            PRINT slot.slot_id + ": " + slot.start_time + " to " + slot.end_time + " (" + slot.is_available + ")"
+
+        PRINT "\n1. Add a Time Slot"
+        PRINT "2. Remove a Time Slot"
+        PRINT "3. Go Back"
+
+        choice = GET user input
+
+        IF choice == "1":
+            PRINT "Enter new time slot:"
+            start = GET input "Start (YYYY-MM-DD HH:MM): "
+            end = GET input "End (YYYY-MM-DD HH:MM): "
+            new_slot = CREATE TimeSlot(user.user_id, start, end, True)
+            DATABASE.save_time_slot(new_slot)
+            PRINT "Time slot added!"
+
+        ELSE IF choice == "2":
+            slot_id_to_remove = GET input "Enter slot ID to remove: "
+            // Instead of deleting, we can set is_available to False, or delete from DB
+            success = DATABASE.delete_time_slot(slot_id_to_remove, user.user_id)
+            IF success:
+                PRINT "Time slot removed."
+            ELSE:
+                PRINT "Error: Could not find slot."
+
+        ELSE IF choice == "3":
+            BREAK
+
+// Find study buddy
+FUNCTION find_study_buddy(User current_user):
+    PRINT "\n--- Find a Study Buddy ---"
+    // Let user choose which course to find a buddy for
+    course = SELECT from current_user.enrolled_courses
+
+    // 1. Get the current user's available time slots
+    my_available_slots = DATABASE.get_available_time_slots(current_user.user_id)
+
+    // 2. Find all other users enrolled in the same course
+    potential_buddies = DATABASE.get_users_in_course(course)
+    REMOVE current_user from potential_buddies
+
+    IF potential_buddies is EMPTY:
+        PRINT "No other students found for " + course
+        RETURN
+
+    // 3. For each potential buddy, find matching available times
+    ARRAY<MATCH> possible_matches = []
+    FOR each buddy in potential_buddies:
+        buddy_slots = DATABASE.get_available_time_slots(buddy.user_id)
+        // Find overlapping time slots
+        common_slots = FIND_OVERLAPPING_SLOTS(my_available_slots, buddy_slots)
+        IF common_slots is not EMPTY:
+            ADD {buddy: buddy, common_times: common_slots} to possible_matches
+
+    // 4. Display suggested matches to the user
+    IF possible_matches is EMPTY:
+        PRINT "No available matches found for " + course + " at your times."
+    ELSE:
+        PRINT "Suggested Study Buddies for " + course + ":"
+        FOR index, match in possible_matches:
+            PRINT index + ". " + match.buddy.name + " - " + LENGTH(match.common_times) + " matching time slots"
+
+        PRINT "\nSelect a buddy to schedule with (or 'b' to go back):"
+        selected_index = GET user input
+
+        IF selected_index is not 'b':
+            selected_match = possible_matches[selected_index]
+            FUNCTION schedule_session(current_user, selected_match.buddy, course, selected_match.common_times)
+
+// Schedule a session
+FUNCTION schedule_session(User user1, User user2, STRING course, ARRAY<TimeSlot> common_times):
+    PRINT "\nScheduling with " + user2.name
+    PRINT "Select a time slot:"
+
+    FOR index, slot in common_times:
+        PRINT index + ". " + slot.start_time + " to " + slot.end_time
+
+    time_choice = GET user input
+    selected_slot = common_times[time_choice]
+
+    location = GET input "Enter meeting location (e.g., Library 2nd floor, Zoom link): "
+
+    // Create the new study session object
+    new_session = CREATE StudySession(
+        course: course,
+        scheduled_time: selected_slot.start_time, // or let them choose exact time within slot
+        location: location,
+        participant_user_ids: [user1.user_id, user2.user_id],
+        status: "pending" // Requires confirmation from user2?
+    )
+
+    // Save to database
+    DATABASE.save_study_session(new_session)
+
+    // In a real app, you would send a notification/email to user2 here
+    PRINT "Study session invitation sent to " + user2.name + "!"
+    PRINT "Session scheduled for " + selected_slot.start_time + " at " + location
+
+// View upcoming Sessions
+FUNCTION view_upcoming_sessions(User user):
+    sessions = DATABASE.get_upcoming_sessions_for_user(user.user_id)
+
+    PRINT "\n--- My Upcoming Study Sessions ---"
+    IF sessions is EMPTY:
+        PRINT "No upcoming sessions."
+    ELSE:
+        FOR each session in sessions:
+            // Get the names of the other participants
+            other_participants = []
+            FOR each id in session.participant_user_ids:
+                IF id != user.user_id:
+                    buddy = DATABASE.get_user_by_id(id)
+                    other_participants.APPEND(buddy.name)
+
+            PRINT "Course: " + session.course
+            PRINT "Time: " + session.scheduled_time
+            PRINT "With: " + JOIN(other_participants, ", ")
+            PRINT "Location: " + session.location
+            PRINT "Status: " + session.status
+            PRINT "-----"
+
+// Edit profile and courses
+FUNCTION view_profile(User user):
+    PRINT "\n--- My Profile ---"
+    PRINT "Name: " + user.name
+    PRINT "Email: " + user.email
+    PRINT "Courses: " + JOIN(user.enrolled_courses, ", ")
+
+    PRINT "\n1. Add a Course"
+    PRINT "2. Remove a Course"
+    PRINT "3. Go Back"
+
+    choice = GET user input
+
+    IF choice == "1":
+        new_course = GET input "Enter course to add: "
+        IF new_course not in user.enrolled_courses:
+            user.enrolled_courses.APPEND(new_course)
+            DATABASE.update_user(user)
+            PRINT "Course added."
+        ELSE:
+            PRINT "Course already in list."
+
+    ELSE IF choice == "2":
+        course_to_remove = GET input "Enter course to remove: "
+        IF course_to_remove in user.enrolled_courses:
+            user.enrolled_courses.REMOVE(course_to_remove)
+            DATABASE.update_user(user)
+            PRINT "Course removed."
+        ELSE:
+            PRINT "Course not found in your list."
+
+// Helper function for matching algorithm
+FUNCTION FIND_OVERLAPPING_SLOTS(ARRAY<TimeSlot> slots1, ARRAY<TimeSlot> slots2):
+    ARRAY<TimeSlot> overlaps = []
+    FOR each slot1 in slots1:
+        FOR each slot2 in slots2:
+            // Check if the two time slots overlap
+            IF (slot1.start_time < slot2.end_time) AND (slot1.end_time > slot2.start_time):
+                // They overlap! Find the common interval.
+                common_start = MAX(slot1.start_time, slot2.start_time)
+                common_end = MIN(slot1.end_time, slot2.end_time)
+                common_slot = CREATE TimeSlot(common_start, common_end)
+                overlaps.APPEND(common_slot)
+    RETURN overlaps
