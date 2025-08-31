@@ -65,11 +65,15 @@ vector<pair<time_t,time_t>> overlaps(const vector<TimeSlot>& a, const vector<Tim
 
 // ------------------------- Database helpers -------------------------
 User* find_user_by_email(const string& email){
-    for (auto& u: USERS) if (u.email==email) return &u; return nullptr;
+    for (auto& u: USERS) 
+        if (u.email==email) return &u; 
+    return nullptr;
 }
 
 User* get_user(int id){
-    for (auto& u: USERS) if (u.id==id) return &u; return nullptr;
+    for (auto& u: USERS) 
+        if (u.id==id) return &u; 
+    return nullptr;
 }
 
 vector<User*> users_in_course(const string& c){

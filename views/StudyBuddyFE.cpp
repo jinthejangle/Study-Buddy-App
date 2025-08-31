@@ -1,4 +1,4 @@
-#include "StudyBuddy.h"
+#include "../models/StudyBuddy.h"
 
 // ------------------------- Main -------------------------
 int main(){
