@@ -58,3 +58,48 @@ bool test_users_in_course() {
         return false;
     }
 }
+
+//Test One
+cout << "\nTest One: ";
+if (test_find_user_by_email_success() == true) {
+    cout << "Pass!";
+}
+else {
+    cout << "Fail.";
+}
+
+//Test Two
+cout << "\nTest Two: ";
+if (test_find_user_by_email_fail() == true) {
+    cout << "Pass!";
+}
+else {
+    cout << "Fail.";
+}
+
+//Test Three
+cout << "\nTest Three: ";
+if (test_get_user_success() == true) {
+    cout << "Pass!";
+}
+else {
+    cout << "Fail.";
+}
+
+//Test Four
+cout << "\nTest Four: ";
+if (test_get_user_fail == true) {
+    cout << "Pass!";
+}
+else {
+    cout << "Fail.";
+}
+
+//Test Five
+cout << "\nTest Five: ";
+if (test_users_in_course() == true) {
+    cout << "Pass!";
+}
+else {
+    cout << "Fail.";
+}
